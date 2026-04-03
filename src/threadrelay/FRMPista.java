@@ -28,18 +28,126 @@ public class FRMPista extends javax.swing.JFrame {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+        PNLProgressBar = new javax.swing.JPanel();
+        LBLAtleta1 = new javax.swing.JLabel();
+        LBLAtleta2 = new javax.swing.JLabel();
+        LBLAtleta3 = new javax.swing.JLabel();
+        LBLAtleta4 = new javax.swing.JLabel();
+        PRGSCorridore1 = new javax.swing.JProgressBar();
+        PRGSCorridore2 = new javax.swing.JProgressBar();
+        PRGSCorridore3 = new javax.swing.JProgressBar();
+        PRGSCorridore4 = new javax.swing.JProgressBar();
+        PNLBottoni = new javax.swing.JPanel();
+        CMBSelezioneVelocita = new javax.swing.JComboBox<>();
+        BTNAvvia = new javax.swing.JButton();
+        BTNPausa = new javax.swing.JButton();
+        BTNRiprendi = new javax.swing.JButton();
+        BTNFerma = new javax.swing.JButton();
+        PNLPosizioneCorridori = new javax.swing.JPanel();
+        PNLStatCorridore1 = new javax.swing.JPanel();
+        LBLCorridore1 = new javax.swing.JLabel();
+        LBLAvanzamentoCorridore1 = new javax.swing.JLabel();
+        PNLStatCorridore2 = new javax.swing.JPanel();
+        LBLCorridore2 = new javax.swing.JLabel();
+        LBLAvanzamentoCorridore2 = new javax.swing.JLabel();
+        PNLStatCorridore3 = new javax.swing.JPanel();
+        LBLCorridore3 = new javax.swing.JLabel();
+        LBLAvanzamentoCorridore3 = new javax.swing.JLabel();
+        PNLStatCorridore4 = new javax.swing.JPanel();
+        LBLCorridore4 = new javax.swing.JLabel();
+        LBLAvanzamentoCorridore4 = new javax.swing.JLabel();
 
-        javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
-        getContentPane().setLayout(layout);
-        layout.setHorizontalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 400, Short.MAX_VALUE)
-        );
-        layout.setVerticalGroup(
-            layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGap(0, 300, Short.MAX_VALUE)
-        );
+        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+        setTitle("Relay Runners");
+
+        PNLProgressBar.setBorder(javax.swing.BorderFactory.createTitledBorder("Corridori"));
+        PNLProgressBar.setPreferredSize(new java.awt.Dimension(1000, 391));
+        PNLProgressBar.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+
+        LBLAtleta1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Immagini/Corridore.gif"))); // NOI18N
+        PNLProgressBar.add(LBLAtleta1, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 40, 70, 70));
+
+        LBLAtleta2.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Immagini/Corridore.gif"))); // NOI18N
+        PNLProgressBar.add(LBLAtleta2, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 210, 70, 70));
+
+        LBLAtleta3.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Immagini/Corridore.gif"))); // NOI18N
+        PNLProgressBar.add(LBLAtleta3, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 380, 70, 70));
+
+        LBLAtleta4.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Immagini/Corridore.gif"))); // NOI18N
+        PNLProgressBar.add(LBLAtleta4, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 540, 70, 70));
+
+        PRGSCorridore1.setCursor(new java.awt.Cursor(java.awt.Cursor.DEFAULT_CURSOR));
+        PNLProgressBar.add(PRGSCorridore1, new org.netbeans.lib.awtextra.AbsoluteConstraints(5, 19, 990, 116));
+        PNLProgressBar.add(PRGSCorridore2, new org.netbeans.lib.awtextra.AbsoluteConstraints(5, 185, 990, 116));
+        PNLProgressBar.add(PRGSCorridore3, new org.netbeans.lib.awtextra.AbsoluteConstraints(5, 351, 990, 116));
+        PNLProgressBar.add(PRGSCorridore4, new org.netbeans.lib.awtextra.AbsoluteConstraints(5, 517, 990, 116));
+
+        getContentPane().add(PNLProgressBar, java.awt.BorderLayout.LINE_START);
+
+        PNLBottoni.setBorder(javax.swing.BorderFactory.createTitledBorder("Comandi"));
+        PNLBottoni.setPreferredSize(new java.awt.Dimension(1454, 120));
+        PNLBottoni.setLayout(new java.awt.GridLayout(1, 5));
+
+        CMBSelezioneVelocita.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Lento", "Spedito", "Veloce", " " }));
+        PNLBottoni.add(CMBSelezioneVelocita);
+
+        BTNAvvia.setText("Avvia Gara");
+        PNLBottoni.add(BTNAvvia);
+
+        BTNPausa.setText("Pausa");
+        PNLBottoni.add(BTNPausa);
+
+        BTNRiprendi.setText("Riprendi");
+        PNLBottoni.add(BTNRiprendi);
+
+        BTNFerma.setText("Ferma Gara");
+        PNLBottoni.add(BTNFerma);
+
+        getContentPane().add(PNLBottoni, java.awt.BorderLayout.PAGE_END);
+
+        PNLPosizioneCorridori.setBorder(javax.swing.BorderFactory.createTitledBorder("Posizione Corridori"));
+        PNLPosizioneCorridori.setMinimumSize(new java.awt.Dimension(310, 573));
+        PNLPosizioneCorridori.setPreferredSize(new java.awt.Dimension(310, 666));
+        PNLPosizioneCorridori.setLayout(new java.awt.GridLayout(4, 2, 0, 50));
+
+        PNLStatCorridore1.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
+        PNLStatCorridore1.setToolTipText("");
+        PNLStatCorridore1.setLayout(new java.awt.GridLayout(1, 2));
+
+        LBLCorridore1.setText("Corridore 1");
+        PNLStatCorridore1.add(LBLCorridore1);
+        PNLStatCorridore1.add(LBLAvanzamentoCorridore1);
+
+        PNLPosizioneCorridori.add(PNLStatCorridore1);
+
+        PNLStatCorridore2.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
+        PNLStatCorridore2.setLayout(new java.awt.GridLayout(1, 2));
+
+        LBLCorridore2.setText("Corridore 2");
+        PNLStatCorridore2.add(LBLCorridore2);
+        PNLStatCorridore2.add(LBLAvanzamentoCorridore2);
+
+        PNLPosizioneCorridori.add(PNLStatCorridore2);
+
+        PNLStatCorridore3.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
+        PNLStatCorridore3.setLayout(new java.awt.GridLayout(1, 2));
+
+        LBLCorridore3.setText("Corridore 3");
+        PNLStatCorridore3.add(LBLCorridore3);
+        PNLStatCorridore3.add(LBLAvanzamentoCorridore3);
+
+        PNLPosizioneCorridori.add(PNLStatCorridore3);
+
+        PNLStatCorridore4.setBorder(javax.swing.BorderFactory.createBevelBorder(javax.swing.border.BevelBorder.RAISED));
+        PNLStatCorridore4.setLayout(new java.awt.GridLayout(1, 2));
+
+        LBLCorridore4.setText("Corridore 4");
+        PNLStatCorridore4.add(LBLCorridore4);
+        PNLStatCorridore4.add(LBLAvanzamentoCorridore4);
+
+        PNLPosizioneCorridori.add(PNLStatCorridore4);
+
+        getContentPane().add(PNLPosizioneCorridori, java.awt.BorderLayout.LINE_END);
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
@@ -70,5 +178,33 @@ public class FRMPista extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JButton BTNAvvia;
+    private javax.swing.JButton BTNFerma;
+    private javax.swing.JButton BTNPausa;
+    private javax.swing.JButton BTNRiprendi;
+    private javax.swing.JComboBox<String> CMBSelezioneVelocita;
+    private javax.swing.JLabel LBLAtleta1;
+    private javax.swing.JLabel LBLAtleta2;
+    private javax.swing.JLabel LBLAtleta3;
+    private javax.swing.JLabel LBLAtleta4;
+    private javax.swing.JLabel LBLAvanzamentoCorridore1;
+    private javax.swing.JLabel LBLAvanzamentoCorridore2;
+    private javax.swing.JLabel LBLAvanzamentoCorridore3;
+    private javax.swing.JLabel LBLAvanzamentoCorridore4;
+    private javax.swing.JLabel LBLCorridore1;
+    private javax.swing.JLabel LBLCorridore2;
+    private javax.swing.JLabel LBLCorridore3;
+    private javax.swing.JLabel LBLCorridore4;
+    private javax.swing.JPanel PNLBottoni;
+    private javax.swing.JPanel PNLPosizioneCorridori;
+    private javax.swing.JPanel PNLProgressBar;
+    private javax.swing.JPanel PNLStatCorridore1;
+    private javax.swing.JPanel PNLStatCorridore2;
+    private javax.swing.JPanel PNLStatCorridore3;
+    private javax.swing.JPanel PNLStatCorridore4;
+    private javax.swing.JProgressBar PRGSCorridore1;
+    private javax.swing.JProgressBar PRGSCorridore2;
+    private javax.swing.JProgressBar PRGSCorridore3;
+    private javax.swing.JProgressBar PRGSCorridore4;
     // End of variables declaration//GEN-END:variables
 }
