@@ -28,6 +28,7 @@ public class FRMPista extends javax.swing.JFrame {
      */
     public FRMPista() {
         initComponents();
+        setResizable(false);
         initRaceControls();
     }
 
@@ -71,28 +72,37 @@ public class FRMPista extends javax.swing.JFrame {
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("Relay Runners");
+        setResizable(false);
 
         PNLProgressBar.setBorder(javax.swing.BorderFactory.createTitledBorder("Corridori"));
         PNLProgressBar.setPreferredSize(new java.awt.Dimension(1000, 391));
-        PNLProgressBar.setLayout(new org.netbeans.lib.awtextra.AbsoluteLayout());
+        PNLProgressBar.setLayout(null);
 
         LBLAtleta1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Immagini/Corridore.gif"))); // NOI18N
-        PNLProgressBar.add(LBLAtleta1, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 40, 70, 70));
+        PNLProgressBar.add(LBLAtleta1);
+        LBLAtleta1.setBounds(10, 40, 70, 70);
 
         LBLAtleta2.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Immagini/Corridore.gif"))); // NOI18N
-        PNLProgressBar.add(LBLAtleta2, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 210, 70, 70));
+        PNLProgressBar.add(LBLAtleta2);
+        LBLAtleta2.setBounds(10, 210, 70, 70);
 
         LBLAtleta3.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Immagini/Corridore.gif"))); // NOI18N
-        PNLProgressBar.add(LBLAtleta3, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 380, 70, 70));
+        PNLProgressBar.add(LBLAtleta3);
+        LBLAtleta3.setBounds(10, 380, 70, 70);
 
         LBLAtleta4.setIcon(new javax.swing.ImageIcon(getClass().getResource("/Immagini/Corridore.gif"))); // NOI18N
-        PNLProgressBar.add(LBLAtleta4, new org.netbeans.lib.awtextra.AbsoluteConstraints(10, 540, 70, 70));
+        PNLProgressBar.add(LBLAtleta4);
+        LBLAtleta4.setBounds(10, 540, 70, 70);
 
         PRGSCorridore1.setCursor(new java.awt.Cursor(java.awt.Cursor.DEFAULT_CURSOR));
-        PNLProgressBar.add(PRGSCorridore1, new org.netbeans.lib.awtextra.AbsoluteConstraints(5, 19, 990, 116));
-        PNLProgressBar.add(PRGSCorridore2, new org.netbeans.lib.awtextra.AbsoluteConstraints(5, 185, 990, 116));
-        PNLProgressBar.add(PRGSCorridore3, new org.netbeans.lib.awtextra.AbsoluteConstraints(5, 351, 990, 116));
-        PNLProgressBar.add(PRGSCorridore4, new org.netbeans.lib.awtextra.AbsoluteConstraints(5, 517, 990, 116));
+        PNLProgressBar.add(PRGSCorridore1);
+        PRGSCorridore1.setBounds(5, 19, 990, 116);
+        PNLProgressBar.add(PRGSCorridore2);
+        PRGSCorridore2.setBounds(5, 185, 990, 116);
+        PNLProgressBar.add(PRGSCorridore3);
+        PRGSCorridore3.setBounds(5, 351, 990, 116);
+        PNLProgressBar.add(PRGSCorridore4);
+        PRGSCorridore4.setBounds(5, 517, 990, 116);
 
         getContentPane().add(PNLProgressBar, java.awt.BorderLayout.LINE_START);
 
@@ -100,7 +110,7 @@ public class FRMPista extends javax.swing.JFrame {
         PNLBottoni.setPreferredSize(new java.awt.Dimension(1454, 120));
         PNLBottoni.setLayout(new java.awt.GridLayout(1, 5));
 
-        CMBSelezioneVelocita.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Lento", "Spedito", "Veloce", " " }));
+        CMBSelezioneVelocita.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "Lento", "Spedito", "Veloce" }));
         PNLBottoni.add(CMBSelezioneVelocita);
 
         BTNAvvia.setText("Avvia Gara");
@@ -290,10 +300,22 @@ public class FRMPista extends javax.swing.JFrame {
 
     private void setRunnerPosition(int index, int value) {
         javax.swing.JLabel runnerLabel = getRunnerLabel(index);
-        int startX = 10;
-        int maxX = 925;
-        int x = startX + (int) Math.round((maxX - startX) * (value / (double) FINISH));
-        runnerLabel.setLocation(x, runnerLabel.getY());
+        javax.swing.JProgressBar progressBar = getProgressBar(index);
+        int trackX = progressBar.getX();
+        int trackWidth = progressBar.getWidth();
+        int runnerWidth = runnerLabel.getWidth();
+        int x = trackX + (int) Math.round((trackWidth - runnerWidth) * (value / (double) FINISH));
+        int y = progressBar.getY() + (progressBar.getHeight() - runnerLabel.getHeight()) / 2;
+        runnerLabel.setBounds(x, y, runnerWidth, runnerLabel.getHeight());
+        bringRunnerToFront(index);
+    }
+
+    private void bringRunnerToFront(int index) {
+        javax.swing.JLabel runnerLabel = getRunnerLabel(index);
+        if (PNLProgressBar.getComponentZOrder(runnerLabel) != 0) {
+            PNLProgressBar.setComponentZOrder(runnerLabel, 0);
+            PNLProgressBar.repaint();
+        }
     }
 
     private javax.swing.JProgressBar getProgressBar(int index) {
