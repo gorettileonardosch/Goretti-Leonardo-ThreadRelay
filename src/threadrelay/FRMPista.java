@@ -4,6 +4,9 @@
  */
 package threadrelay;
 
+import java.util.concurrent.atomic.AtomicInteger;
+import javax.swing.SwingUtilities;
+
 /**
  *
  * @author MoMo
@@ -11,12 +14,21 @@ package threadrelay;
 public class FRMPista extends javax.swing.JFrame {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(FRMPista.class.getName());
+    private static final int RUNNERS = 4;
+    private static final int FINISH = 99;
+    private final Object pauseLock = new Object();
+    private volatile boolean paused;
+    private volatile boolean stopped;
+    private final RelayRunner[] runners = new RelayRunner[RUNNERS];
+    private final Thread[] runnerThreads = new Thread[RUNNERS];
+    private final AtomicInteger finishedCount = new AtomicInteger();
 
     /**
      * Creates new form FRMPista
      */
     public FRMPista() {
         initComponents();
+        initRaceControls();
     }
 
     /**
@@ -151,6 +163,251 @@ public class FRMPista extends javax.swing.JFrame {
 
         pack();
     }// </editor-fold>//GEN-END:initComponents
+
+    private void initRaceControls() {
+        PRGSCorridore1.setMinimum(0);
+        PRGSCorridore1.setMaximum(FINISH);
+        PRGSCorridore2.setMinimum(0);
+        PRGSCorridore2.setMaximum(FINISH);
+        PRGSCorridore3.setMinimum(0);
+        PRGSCorridore3.setMaximum(FINISH);
+        PRGSCorridore4.setMinimum(0);
+        PRGSCorridore4.setMaximum(FINISH);
+
+        BTNAvvia.addActionListener(evt -> startRace());
+        BTNPausa.addActionListener(evt -> pauseRace());
+        BTNRiprendi.addActionListener(evt -> resumeRace());
+        BTNFerma.addActionListener(evt -> stopRace());
+
+        BTNPausa.setEnabled(false);
+        BTNRiprendi.setEnabled(false);
+        BTNFerma.setEnabled(false);
+
+        resetRace();
+    }
+
+    private void resetRace() {
+        paused = false;
+        stopped = false;
+        finishedCount.set(0);
+
+        SwingUtilities.invokeLater(() -> {
+            LBLAvanzamentoCorridore1.setText("");
+            LBLAvanzamentoCorridore2.setText("");
+            LBLAvanzamentoCorridore3.setText("");
+            LBLAvanzamentoCorridore4.setText("");
+
+            PRGSCorridore1.setValue(0);
+            PRGSCorridore2.setValue(0);
+            PRGSCorridore3.setValue(0);
+            PRGSCorridore4.setValue(0);
+
+            setRunnerPosition(0, 0);
+            setRunnerPosition(1, 0);
+            setRunnerPosition(2, 0);
+            setRunnerPosition(3, 0);
+        });
+    }
+
+    private void startRace() {
+        resetRace();
+        CMBSelezioneVelocita.setEnabled(false);
+        BTNAvvia.setEnabled(false);
+        BTNPausa.setEnabled(true);
+        BTNRiprendi.setEnabled(false);
+        BTNFerma.setEnabled(true);
+
+        int speedMillis = raceSpeedMillis();
+
+        for (int i = 0; i < RUNNERS; i++) {
+            runners[i] = new RelayRunner(i, speedMillis);
+            runnerThreads[i] = new Thread(runners[i], "Runner-" + (i + 1));
+        }
+
+        if (runnerThreads[0] != null) {
+            runnerThreads[0].start();
+        }
+    }
+
+    private void pauseRace() {
+        if (!paused && !stopped) {
+            paused = true;
+            BTNPausa.setEnabled(false);
+            BTNRiprendi.setEnabled(true);
+        }
+    }
+
+    private void resumeRace() {
+        if (paused && !stopped) {
+            synchronized (pauseLock) {
+                paused = false;
+                pauseLock.notifyAll();
+            }
+            BTNPausa.setEnabled(true);
+            BTNRiprendi.setEnabled(false);
+        }
+    }
+
+    private void stopRace() {
+        stopped = true;
+        paused = false;
+        synchronized (pauseLock) {
+            pauseLock.notifyAll();
+        }
+
+        BTNPausa.setEnabled(false);
+        BTNRiprendi.setEnabled(false);
+        BTNFerma.setEnabled(false);
+        CMBSelezioneVelocita.setEnabled(true);
+        BTNAvvia.setEnabled(true);
+    }
+
+    private void enableControlsAfterFinish() {
+        CMBSelezioneVelocita.setEnabled(true);
+        BTNAvvia.setEnabled(true);
+        BTNPausa.setEnabled(false);
+        BTNRiprendi.setEnabled(false);
+        BTNFerma.setEnabled(false);
+    }
+
+    private void startNextRunner(int currentIndex) {
+        int nextIndex = currentIndex + 1;
+        if (nextIndex < RUNNERS && !stopped) {
+            Thread nextThread = runnerThreads[nextIndex];
+            if (nextThread != null && !nextThread.isAlive()) {
+                nextThread.start();
+            }
+        }
+    }
+
+    private void updateRunnerProgress(int index, int value) {
+        SwingUtilities.invokeLater(() -> {
+            getProgressBar(index).setValue(value);
+            getStatusLabel(index).setText(value < FINISH ? String.valueOf(value) : "Fine");
+            setRunnerPosition(index, value);
+        });
+    }
+
+    private void setRunnerPosition(int index, int value) {
+        javax.swing.JLabel runnerLabel = getRunnerLabel(index);
+        int startX = 10;
+        int maxX = 925;
+        int x = startX + (int) Math.round((maxX - startX) * (value / (double) FINISH));
+        runnerLabel.setLocation(x, runnerLabel.getY());
+    }
+
+    private javax.swing.JProgressBar getProgressBar(int index) {
+        switch (index) {
+            case 0:
+                return PRGSCorridore1;
+            case 1:
+                return PRGSCorridore2;
+            case 2:
+                return PRGSCorridore3;
+            case 3:
+            default:
+                return PRGSCorridore4;
+        }
+    }
+
+    private javax.swing.JLabel getStatusLabel(int index) {
+        switch (index) {
+            case 0:
+                return LBLAvanzamentoCorridore1;
+            case 1:
+                return LBLAvanzamentoCorridore2;
+            case 2:
+                return LBLAvanzamentoCorridore3;
+            case 3:
+            default:
+                return LBLAvanzamentoCorridore4;
+        }
+    }
+
+    private javax.swing.JLabel getRunnerLabel(int index) {
+        switch (index) {
+            case 0:
+                return LBLAtleta1;
+            case 1:
+                return LBLAtleta2;
+            case 2:
+                return LBLAtleta3;
+            case 3:
+            default:
+                return LBLAtleta4;
+        }
+    }
+
+    private int raceSpeedMillis() {
+        switch (CMBSelezioneVelocita.getSelectedIndex()) {
+            case 0:
+                return 120;
+            case 1:
+                return 60;
+            case 2:
+                return 25;
+            default:
+                return 60;
+        }
+    }
+
+    private void runnerDone() {
+        if (finishedCount.incrementAndGet() == RUNNERS) {
+            SwingUtilities.invokeLater(this::enableControlsAfterFinish);
+        }
+    }
+
+    private class RelayRunner implements Runnable {
+        private final int index;
+        private final int stepMillis;
+        private int count;
+
+        RelayRunner(int index, int stepMillis) {
+            this.index = index;
+            this.stepMillis = stepMillis;
+            this.count = 0;
+        }
+
+        @Override
+        public void run() {
+            updateRunnerProgress(index, count);
+            while (!stopped && count < FINISH) {
+                if (count == 90 && index < RUNNERS - 1) {
+                    startNextRunner(index);
+                }
+
+                try {
+                    Thread.sleep(stepMillis);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+
+                synchronized (pauseLock) {
+                    while (paused && !stopped) {
+                        try {
+                            pauseLock.wait();
+                        } catch (InterruptedException ex) {
+                            Thread.currentThread().interrupt();
+                            stopped = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (stopped) {
+                    break;
+                }
+
+                count++;
+                updateRunnerProgress(index, count);
+            }
+
+            if (!stopped && count >= FINISH) {
+                runnerDone();
+            }
+        }
+    }
 
     /**
      * @param args the command line arguments
