@@ -8,28 +8,45 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.SwingUtilities;
 
 /**
- *
+ * FRMPista - Simulatore di gara di staffetta con 4 corridori
+ * 
+ * Questa applicazione simula una gara di staffetta dove 4 corridori corrono in sequenza.
+ * Ogni corridore parte quando il precedente raggiunge una certa posizione (90).
+ * Supporta pausa, ripresa e arresto della gara.
+ * 
  * @author MoMo
  */
 public class FRMPista extends javax.swing.JFrame {
     
+    // Logger per registrare eventuali errori o informazioni importanti
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(FRMPista.class.getName());
-    private static final int RUNNERS = 4;
-    private static final int FINISH = 99;
-    private final Object pauseLock = new Object();
-    private volatile boolean paused;
-    private volatile boolean stopped;
-    private final RelayRunner[] runners = new RelayRunner[RUNNERS];
-    private final Thread[] runnerThreads = new Thread[RUNNERS];
-    private final AtomicInteger finishedCount = new AtomicInteger();
+    
+    // Costanti della gara
+    private static final int NUMCORRIDORI = 4;      // Numero di corridori nella staffetta
+    private static final int TRAGUARDO = 99;         // Punto di arrivo (il valore massimo della progress bar)
+    private static final int PUNTODISCAMBIO = 90;    // Posizione dove il corridore passa il testimone
+    
+    // Sincronizzazione e controllo del flusso di esecuzione
+    private final Object pauseLock = new Object();  // Lock utilizzato per sincronizzare la pausa
+    private volatile boolean paused;                // Flag: true se la gara è in pausa
+    private volatile boolean stopped;               // Flag: true se la gara è stata fermata
+    
+    // Array che contiene i 4 corridori (oggetti Runnable)
+    private final CorridoreDiStaffetta[] corridori = new CorridoreDiStaffetta[NUMCORRIDORI];
+    
+    // Array che contiene i 4 thread dei corridori
+    private final Thread[] threadCorridori = new Thread[NUMCORRIDORI];
+    
+    // Contatore atomico: tiene traccia di quanti corridori hanno finito (serve per la sincronizzazione)
+    private final AtomicInteger conteggiCompletati = new AtomicInteger();
 
     /**
-     * Creates new form FRMPista
+     * Costruttore: Crea e inizializza la finestra della gara
      */
     public FRMPista() {
-        initComponents();
-        setResizable(false);
-        initRaceControls();
+        initComponents();           // Inizializza tutti i componenti grafici (bottoni, label, progress bar)
+        setResizable(false);        // La finestra non è ridimensionabile
+        initRaceControls();         // Configura i controlli della gara (bottoni e progress bar)
     }
 
     /**
@@ -174,105 +191,144 @@ public class FRMPista extends javax.swing.JFrame {
         pack();
     }// </editor-fold>//GEN-END:initComponents
 
+    /**
+     * Inizializza i controlli della gara: configura i bottoni e le progress bar
+     */
     private void initRaceControls() {
+        // Configura le 4 progress bar: da 0 (inizio) a 99 (fine pista)
         PRGSCorridore1.setMinimum(0);
-        PRGSCorridore1.setMaximum(FINISH);
+        PRGSCorridore1.setMaximum(TRAGUARDO);
         PRGSCorridore2.setMinimum(0);
-        PRGSCorridore2.setMaximum(FINISH);
+        PRGSCorridore2.setMaximum(TRAGUARDO);
         PRGSCorridore3.setMinimum(0);
-        PRGSCorridore3.setMaximum(FINISH);
+        PRGSCorridore3.setMaximum(TRAGUARDO);
         PRGSCorridore4.setMinimum(0);
-        PRGSCorridore4.setMaximum(FINISH);
+        PRGSCorridore4.setMaximum(TRAGUARDO);
 
-        BTNAvvia.addActionListener(evt -> startRace());
-        BTNPausa.addActionListener(evt -> pauseRace());
-        BTNRiprendi.addActionListener(evt -> resumeRace());
-        BTNFerma.addActionListener(evt -> stopRace());
+        // Associa i bottoni ai rispettivi metodi (quando cliccati, cosa accade)
+        BTNAvvia.addActionListener(evt -> avviaGara());       // "Avvia Gara" button
+        BTNPausa.addActionListener(evt -> pausaGara());       // "Pausa" button
+        BTNRiprendi.addActionListener(evt -> riproduciGara()); // "Riprendi" button
+        BTNFerma.addActionListener(evt -> fermaGara());       // "Ferma Gara" button
 
+        // All'inizio: solo "Avvia" è disponibile, gli altri bottoni sono disabilitati
         BTNPausa.setEnabled(false);
         BTNRiprendi.setEnabled(false);
         BTNFerma.setEnabled(false);
 
-        resetRace();
+        // Ripristina lo stato della gara
+        ripristinaGara();
     }
 
-    private void resetRace() {
-        paused = false;
-        stopped = false;
-        finishedCount.set(0);
+    /**
+     * Ripristina lo stato della gara: azzera i contatori e le visualizzazioni
+     * Viene chiamato all'inizio o quando si vuole ricominciare
+     */
+    private void ripristinaGara() {
+        paused = false;                    // La gara non è in pausa
+        stopped = false;                   // La gara non è fermata
+        conteggiCompletati.set(0);         // Azzera il contatore di corridori finiti
 
+        // Aggiorna l'interfaccia grafica usando il thread di Swing (thread-safe)
         SwingUtilities.invokeLater(() -> {
+            // Azzera i testi che mostrano la posizione
             LBLAvanzamentoCorridore1.setText("");
             LBLAvanzamentoCorridore2.setText("");
             LBLAvanzamentoCorridore3.setText("");
             LBLAvanzamentoCorridore4.setText("");
 
+            // Resetta tutte le progress bar a 0
             PRGSCorridore1.setValue(0);
             PRGSCorridore2.setValue(0);
             PRGSCorridore3.setValue(0);
             PRGSCorridore4.setValue(0);
 
-            setRunnerPosition(0, 0);
-            setRunnerPosition(1, 0);
-            setRunnerPosition(2, 0);
-            setRunnerPosition(3, 0);
+            // Posiziona l'immagine di ogni corridore all'inizio della pista
+            posizionaCorridore(0, 0);
+            posizionaCorridore(1, 0);
+            posizionaCorridore(2, 0);
+            posizionaCorridore(3, 0);
         });
     }
 
-    private void startRace() {
-        resetRace();
-        CMBSelezioneVelocita.setEnabled(false);
-        BTNAvvia.setEnabled(false);
-        BTNPausa.setEnabled(true);
-        BTNRiprendi.setEnabled(false);
-        BTNFerma.setEnabled(true);
+    /**
+     * Avvia la gara: crea i thread dei 4 corridori e fa partire il primo
+     * Gli altri partiranno quando il corridore precedente raggiunge il punto di passaggio
+     */
+    private void avviaGara() {
+        ripristinaGara();                                      // Azzera tutto
+        CMBSelezioneVelocita.setEnabled(false);         // Non si può più cambiare velocità
+        BTNAvvia.setEnabled(false);                      // Non si può cliccare "Avvia" di nuovo
+        BTNPausa.setEnabled(true);                       // Attiva il bottone "Pausa"
+        BTNRiprendi.setEnabled(false);                   // "Riprendi" non serve ancora
+        BTNFerma.setEnabled(true);                       // Attiva il bottone "Ferma"
 
-        int speedMillis = raceSpeedMillis();
+        // Legge la velocità scelta dall'utente dalla combo box (Lento, Spedito, Veloce)
+        int millisecondiVelocita = millisecondiVelocitaGara();
 
-        for (int i = 0; i < RUNNERS; i++) {
-            runners[i] = new RelayRunner(i, speedMillis);
-            runnerThreads[i] = new Thread(runners[i], "Runner-" + (i + 1));
+        // Crea i 4 corridori e i loro thread
+        for (int i = 0; i < NUMCORRIDORI; i++) {
+            corridori[i] = new CorridoreDiStaffetta(i, millisecondiVelocita);        // Crea il corridore
+            threadCorridori[i] = new Thread(corridori[i], "Corridore-" + (i + 1)); // Crea il thread
         }
 
-        if (runnerThreads[0] != null) {
-            runnerThreads[0].start();
+        // Fa partire solo il primo corridore (gli altri partiranno al loro turno)
+        if (threadCorridori[0] != null) {
+            threadCorridori[0].start();
         }
     }
 
-    private void pauseRace() {
+    /**
+     * Mette la gara in pausa: i corridori si fermano al loro posto
+     * Disabilita "Pausa" e abilita "Riprendi"
+     */
+    private void pausaGara() {
         if (!paused && !stopped) {
-            paused = true;
-            BTNPausa.setEnabled(false);
-            BTNRiprendi.setEnabled(true);
+            paused = true;                      // Attiva il flag di pausa
+            BTNPausa.setEnabled(false);        // Non puoi cliccare "Pausa" due volte
+            BTNRiprendi.setEnabled(true);      // Attiva il bottone "Riprendi"
         }
     }
 
-    private void resumeRace() {
+    /**
+     * Riprende la gara dalla pausa: i corridori continuano a correre
+     * Disabilita "Riprendi" e abilita "Pausa"
+     */
+    private void riproduciGara() {
         if (paused && !stopped) {
-            synchronized (pauseLock) {
-                paused = false;
-                pauseLock.notifyAll();
+            synchronized (pauseLock) {          // Sincronizzazione: prende il lock
+                paused = false;                 // Disattiva il flag di pausa
+                pauseLock.notifyAll();          // Sveglia tutti i thread che stavano aspettando
             }
-            BTNPausa.setEnabled(true);
-            BTNRiprendi.setEnabled(false);
+            BTNPausa.setEnabled(true);         // Attiva il bottone "Pausa"
+            BTNRiprendi.setEnabled(false);     // Disattiva il bottone "Riprendi"
         }
     }
 
-    private void stopRace() {
-        stopped = true;
-        paused = false;
-        synchronized (pauseLock) {
-            pauseLock.notifyAll();
+    /**
+     * Ferma completamente la gara: tutti i corridori smettono
+     * Riporta gli elementi di controllo allo stato iniziale
+     */
+    private void fermaGara() {
+        stopped = true;                         // Attiva il flag di stop
+        paused = false;                         // Disattiva la pausa
+        synchronized (pauseLock) {              // Sincronizzazione: prende il lock
+            pauseLock.notifyAll();              // Sveglia tutti i thread (se in attesa)
         }
 
+        // Aggiorna i bottoni: disabilita quelli di control della gara
         BTNPausa.setEnabled(false);
         BTNRiprendi.setEnabled(false);
         BTNFerma.setEnabled(false);
-        CMBSelezioneVelocita.setEnabled(true);
-        BTNAvvia.setEnabled(true);
+        CMBSelezioneVelocita.setEnabled(true);  // Riabilita la scelta della velocità
+        BTNAvvia.setEnabled(true);              // Riabilita il bottone "Avvia"
     }
 
-    private void enableControlsAfterFinish() {
+    /**
+     * Riabilita i controlli dopo che tutti i corridori hanno finito
+     * Riporta l'interfaccia allo stato iniziale per una nuova gara
+     */
+    private void abilitaControlliDopoFine() {
         CMBSelezioneVelocita.setEnabled(true);
         BTNAvvia.setEnabled(true);
         BTNPausa.setEnabled(false);
@@ -280,44 +336,80 @@ public class FRMPista extends javax.swing.JFrame {
         BTNFerma.setEnabled(false);
     }
 
-    private void startNextRunner(int currentIndex) {
-        int nextIndex = currentIndex + 1;
-        if (nextIndex < RUNNERS && !stopped) {
-            Thread nextThread = runnerThreads[nextIndex];
-            if (nextThread != null && !nextThread.isAlive()) {
-                nextThread.start();
+    /**
+     * Fa partire il prossimo corridore quando il precedente raggiunge il punto di passaggio (90)
+     * Se c'è ancora un corridore che non ha finito e la gara non è stata fermata
+     */
+    private void avviaCorridoreSuccessivo(int indiceAttuale) {
+        int indiceSuccessivo = indiceAttuale + 1;
+        // Se c'è un prossimo corridore, la gara non è fermata e il thread non sta già correndo
+        if (indiceSuccessivo < NUMCORRIDORI && !stopped) {
+            Thread threadSuccessivo = threadCorridori[indiceSuccessivo];
+            if (threadSuccessivo != null && !threadSuccessivo.isAlive()) {
+                threadSuccessivo.start();  // Fa partire il thread del prossimo corridore
             }
         }
     }
 
-    private void updateRunnerProgress(int index, int value) {
+    /**
+     * Aggiorna la visualizzazione di un corridore: progress bar, testo della posizione e immagine
+     * Viene chiamato da ogni thread quando il corridore avanza
+     */
+    private void aggiornaProgressioneCorridore(int indice, int valore) {
+        // SwingUtilities.invokeLater esegue il codice nel thread di Swing (thread-safe)
         SwingUtilities.invokeLater(() -> {
-            getProgressBar(index).setValue(value);
-            getStatusLabel(index).setText(value < FINISH ? String.valueOf(value) : "Fine");
-            setRunnerPosition(index, value);
+            getProgressBar(indice).setValue(valore);                                    // Aggiorna la progress bar
+            getEtichettaStato(indice).setText(valore < TRAGUARDO ? String.valueOf(valore) : "Fine");  // Mostra la posizione o "Fine"
+            posizionaCorridore(indice, valore);                                          // Posiziona l'immagine del corridore
         });
     }
 
-    private void setRunnerPosition(int index, int value) {
-        javax.swing.JLabel runnerLabel = getRunnerLabel(index);
-        javax.swing.JProgressBar progressBar = getProgressBar(index);
-        int trackX = progressBar.getX();
-        int trackWidth = progressBar.getWidth();
-        int runnerWidth = runnerLabel.getWidth();
-        int x = trackX + (int) Math.round((trackWidth - runnerWidth) * (value / (double) FINISH));
-        int y = progressBar.getY() + (progressBar.getHeight() - runnerLabel.getHeight()) / 2;
-        runnerLabel.setBounds(x, y, runnerWidth, runnerLabel.getHeight());
-        bringRunnerToFront(index);
+    /**
+     * Posiziona l'immagine del corridore sulla pista in base al valore della progress bar
+     * Calcola la posizione X in base alla percentuale di avanzamento, la posizione Y al centro
+     */
+    private void posizionaCorridore(int indice, int valore) {
+        javax.swing.JLabel etichettaCorridore = getEtichettaCorridore(indice);           // Prende l'immagine del corridore
+        javax.swing.JProgressBar barraProgresso = getProgressBar(indice);     // Prende la progress bar del corridore
+        
+        // Ottiene le coordinate della progress bar
+        int xPista = barraProgresso.getX();
+        int larghezzaPista = barraProgresso.getWidth();
+        
+        // Calcola la larghezza dell'immagine del corridore
+        int larghezzaCorridore = etichettaCorridore.getWidth();
+        
+        // Calcola la posizione X: percentuale di avanzamento * larghezza della pista
+        // Math.round arrotonda al valore più vicino
+        int x = xPista + (int) Math.round((larghezzaPista - larghezzaCorridore) * (valore / (double) TRAGUARDO));
+        
+        // Calcola la posizione Y: al centro verticale della progress bar
+        int y = barraProgresso.getY() + (barraProgresso.getHeight() - etichettaCorridore.getHeight()) / 2;
+        
+        // Posiziona l'immagine (x, y, larghezza, altezza)
+        etichettaCorridore.setBounds(x, y, larghezzaCorridore, etichettaCorridore.getHeight());
+        
+        // Porta l'immagine in primo piano (davanti alle altre)
+        portaCorridoreInPrimo(indice);
     }
 
-    private void bringRunnerToFront(int index) {
-        javax.swing.JLabel runnerLabel = getRunnerLabel(index);
-        if (PNLProgressBar.getComponentZOrder(runnerLabel) != 0) {
-            PNLProgressBar.setComponentZOrder(runnerLabel, 0);
-            PNLProgressBar.repaint();
+    /**
+     * Porta l'immagine di un corridore in primo piano sulla pista
+     * Serve per evitare che le immagini si sovrappongano in modo confuso
+     */
+    private void portaCorridoreInPrimo(int indice) {
+        javax.swing.JLabel etichettaCorridore = getEtichettaCorridore(indice);
+        // Se non è già in primo piano (ordine Z = 0)
+        if (PNLProgressBar.getComponentZOrder(etichettaCorridore) != 0) {
+            PNLProgressBar.setComponentZOrder(etichettaCorridore, 0);    // Mettela in primo piano
+            PNLProgressBar.repaint();                             // Ridisegna il pannello
         }
     }
 
+    /**
+     * Restituisce la progress bar corrispondente al corridore (in base all'indice)
+     * Indice 0 = Corridore 1, Indice 1 = Corridore 2, ecc.
+     */
     private javax.swing.JProgressBar getProgressBar(int index) {
         switch (index) {
             case 0:
@@ -332,8 +424,12 @@ public class FRMPista extends javax.swing.JFrame {
         }
     }
 
-    private javax.swing.JLabel getStatusLabel(int index) {
-        switch (index) {
+    /**
+     * Restituisce la label che mostra la posizione del corridore (in base all'indice)
+     * Mostra il numero di passi completati
+     */
+    private javax.swing.JLabel getEtichettaStato(int indice) {
+        switch (indice) {
             case 0:
                 return LBLAvanzamentoCorridore1;
             case 1:
@@ -346,8 +442,12 @@ public class FRMPista extends javax.swing.JFrame {
         }
     }
 
-    private javax.swing.JLabel getRunnerLabel(int index) {
-        switch (index) {
+    /**
+     * Restituisce l'immagine del corridore (in base all'indice)
+     * Questa immagine si sposta sulla pista durante la gara
+     */
+    private javax.swing.JLabel getEtichettaCorridore(int indice) {
+        switch (indice) {
             case 0:
                 return LBLAtleta1;
             case 1:
@@ -360,99 +460,148 @@ public class FRMPista extends javax.swing.JFrame {
         }
     }
 
-    private int raceSpeedMillis() {
+    /**
+     * Legge la velocità selezionata dall'utente e la converte in millisecondi di attesa
+     * Più basso il valore, più veloce corre il corridore
+     * 
+     * Il valore represent il tempo di attesa tra ogni passo.
+     * Una gara "Lento" ha 120ms tra i passi, "Veloce" solo 25ms
+     */
+    private int millisecondiVelocitaGara() {
         switch (CMBSelezioneVelocita.getSelectedIndex()) {
-            case 0:
-                return 120;
-            case 1:
-                return 60;
-            case 2:
-                return 25;
+            case 0:  // Indice 0 = "Lento"
+                return 120;  // Attende 120ms tra ogni passo
+            case 1:  // Indice 1 = "Spedito"
+                return 60;   // Attende 60ms tra ogni passo
+            case 2:  // Indice 2 = "Veloce"
+                return 25;   // Attende 25ms tra ogni passo
             default:
-                return 60;
+                return 60;   // Valore di default se qualcosa non va
         }
     }
 
-    private void runnerDone() {
-        if (finishedCount.incrementAndGet() == RUNNERS) {
-            SwingUtilities.invokeLater(this::enableControlsAfterFinish);
+    /**
+     * Viene chiamato quando un corridore finisce la gara (raggiunge 99)
+     * Incrementa il contatore e quando tutti i 4 corridori hanno finito,
+     * abilita di nuovo i controlli per una nuova gara
+     */
+    private void corridoreCompletato() {
+        // Incrementa il contatore atomico di corridori finiti
+        if (conteggiCompletati.incrementAndGet() == NUMCORRIDORI) {
+            // Se tutti i 4 corridori hanno finito, riabilita i controlli
+            SwingUtilities.invokeLater(this::abilitaControlliDopoFine);
         }
     }
 
-    private class RelayRunner implements Runnable {
-        private final int index;
-        private final int stepMillis;
-        private int count;
+    /**
+     * CorridoreDiStaffetta: Classe interna che rappresenta un corridore nella staffetta
+     * Implementa Runnable, quindi viene eseguita in un thread separato
+     * 
+     * Ogni corridore:
+     * 1. Corre da 0 a 99 (passaggi incrementali)
+     * 2. A 90, fa partire il prossimo corridore (passaggio del testimone)
+     * 3. Supporta pausa e arresto
+     */
+    private class CorridoreDiStaffetta implements Runnable {
+        private final int indice;           // Numero del corridore (0-3)
+        private final int millisecondiPasso;      // Millisecondi di attesa tra ogni passo
+        private int conteggio;                 // Posizione attuale del corridore (0-99)
 
-        RelayRunner(int index, int stepMillis) {
-            this.index = index;
-            this.stepMillis = stepMillis;
-            this.count = 0;
+        /**
+         * Crea un nuovo corridore
+         * @param indice il numero del corridore (0 = primo, 3 = ultimo)
+         * @param millisecondiPasso i millisecondi tra ogni passo
+         */
+        CorridoreDiStaffetta(int indice, int millisecondiPasso) {
+            this.indice = indice;
+            this.millisecondiPasso = millisecondiPasso;
+            this.conteggio = 0;
         }
 
+        /**
+         * Metodo principale: questo viene eseguito quando il thread parte
+         * Il corridore corre finché non raggiunge 99 o la gara non viene fermata
+         */
         @Override
         public void run() {
-            updateRunnerProgress(index, count);
-            while (!stopped && count < FINISH) {
-                if (count == 90 && index < RUNNERS - 1) {
-                    startNextRunner(index);
+            // Mostra il corridore all'inizio (posizione 0)
+            aggiornaProgressioneCorridore(indice, conteggio);
+            
+            // Loop principale della corsa
+            while (!stopped && conteggio < TRAGUARDO) {
+                
+                // Quando il corridore raggiunge la posizione 90, fa partire il prossimo corridore
+                // Se c'è un prossimo corridore, naturalmente
+                if (conteggio == PUNTODISCAMBIO && indice < NUMCORRIDORI - 1) {
+                    avviaCorridoreSuccessivo(indice);  // Passa il testimone al prossimo
                 }
 
+                // Attende il tempo stabilito (120ms per Lento, 60ms per Spedito, ecc.)
                 try {
-                    Thread.sleep(stepMillis);
+                    Thread.sleep(millisecondiPasso);
                 } catch (InterruptedException ex) {
+                    // Se il thread viene interrotto, marca come interrotto e esci
                     Thread.currentThread().interrupt();
                     break;
                 }
 
+                // Se la gara è in pausa, aspetta qui finché non riprende
                 synchronized (pauseLock) {
                     while (paused && !stopped) {
                         try {
-                            pauseLock.wait();
+                            pauseLock.wait();  // Aspetta che qualcuno chiami notifyAll()
                         } catch (InterruptedException ex) {
                             Thread.currentThread().interrupt();
-                            stopped = true;
+                            stopped = true;    // Se interrotto durante la pausa, ferma tutto
                             break;
                         }
                     }
                 }
 
+                // Se la gara è stata fermata, esci dal loop
                 if (stopped) {
                     break;
                 }
 
-                count++;
-                updateRunnerProgress(index, count);
+                // Incrementa la posizione e aggiorna la visualizzazione
+                conteggio++;
+                aggiornaProgressioneCorridore(indice, conteggio);
             }
 
-            if (!stopped && count >= FINISH) {
-                runnerDone();
+            // Se la gara non è stata fermata e il corridore ha raggiunto il traguardo
+            if (!stopped && conteggio >= TRAGUARDO) {
+                corridoreCompletato();  // Notifica che questo corridore ha finito
             }
         }
     }
 
     /**
-     * @param args the command line arguments
+     * Metodo main: punto di inizio dell'applicazione
+     * Configura il look and feel di Swing e crea la finestra
+     * 
+     * @param args parametri della riga di comando (non utilizzati)
      */
-    public static void main(String args[]) {
-        /* Set the Nimbus look and feel */
+    public static void main(String[] args) {
+        /* Configura l'aspetto dell'interfaccia grafica usando il tema "Nimbus" */
         //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
-        /* If Nimbus (introduced in Java SE 6) is not available, stay with the default look and feel.
-         * For details see http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html 
+        /* Se Nimbus (introdotto in Java SE 6) non è disponibile, usa il tema di default.
+         * Per dettagli vedi http://download.oracle.com/javase/tutorial/uiswing/lookandfeel/plaf.html 
          */
         try {
-            for (javax.swing.UIManager.LookAndFeelInfo info : javax.swing.UIManager.getInstalledLookAndFeels()) {
-                if ("Nimbus".equals(info.getName())) {
-                    javax.swing.UIManager.setLookAndFeel(info.getClassName());
+            // Cerca tra i look and feel disponibili
+            for (javax.swing.UIManager.LookAndFeelInfo infoAspetto : javax.swing.UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equals(infoAspetto.getName())) {
+                    javax.swing.UIManager.setLookAndFeel(infoAspetto.getClassName());  // Imposta Nimbus
                     break;
                 }
             }
         } catch (ReflectiveOperationException | javax.swing.UnsupportedLookAndFeelException ex) {
+            // Se qualcosa va male, registra l'errore nel logger ma continua comunque
             logger.log(java.util.logging.Level.SEVERE, null, ex);
         }
         //</editor-fold>
 
-        /* Create and display the form */
+        /* Crea e mostra la finestra della gara nel thread di Swing (thread-safe) */
         java.awt.EventQueue.invokeLater(() -> new FRMPista().setVisible(true));
     }
 
