@@ -4,7 +4,10 @@
  */
 package threadrelay;
 
+import java.awt.Component;
+import java.awt.Container;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.swing.JProgressBar;
 import javax.swing.SwingUtilities;
 
 /**
@@ -22,17 +25,17 @@ public class FRMPista extends javax.swing.JFrame {
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(FRMPista.class.getName());
     
     // Costanti della gara
-    private static final int NUMCORRIDORI = 4;      // Numero di corridori nella staffetta
-    private static final int TRAGUARDO = 99;         // Punto di arrivo (il valore massimo della progress bar)
-    private static final int PUNTODISCAMBIO = 90;    // Posizione dove il corridore passa il testimone
+    public static final int NUMCORRIDORI = 4;      // Numero di corridori nella staffetta
+    public static final int TRAGUARDO = 99;         // Punto di arrivo (il valore massimo della progress bar)
+    public static final int PUNTODISCAMBIO = 90;    // Posizione dove il corridore passa il testimone
+    public static int posAttuale;                    // Corridore che ha il testimone corrente
     
-    // Sincronizzazione e controllo del flusso di esecuzione
-    private final Object pauseLock = new Object();  // Lock utilizzato per sincronizzare la pausa
+    // Controllo dello stato della gara
     private volatile boolean paused;                // Flag: true se la gara è in pausa
     private volatile boolean stopped;               // Flag: true se la gara è stata fermata
     
-    // Array che contiene i 4 corridori (oggetti Runnable)
-    private final CorridoreDiStaffetta[] corridori = new CorridoreDiStaffetta[NUMCORRIDORI];
+    // Array che contiene i 4 corridori
+    private final Corridore[] corridori = new Corridore[NUMCORRIDORI];
     
     // Array che contiene i 4 thread dei corridori
     private final Thread[] threadCorridori = new Thread[NUMCORRIDORI];
@@ -46,6 +49,10 @@ public class FRMPista extends javax.swing.JFrame {
     public FRMPista() {
         initComponents();           // Inizializza tutti i componenti grafici (bottoni, label, progress bar)
         setResizable(false);        // La finestra non è ridimensionabile
+        PRGSCorridore1 = sostituisciProgressBar(PRGSCorridore1);
+        PRGSCorridore2 = sostituisciProgressBar(PRGSCorridore2);
+        PRGSCorridore3 = sostituisciProgressBar(PRGSCorridore3);
+        PRGSCorridore4 = sostituisciProgressBar(PRGSCorridore4);
         initRaceControls();         // Configura i controlli della gara (bottoni e progress bar)
     }
 
@@ -220,6 +227,27 @@ public class FRMPista extends javax.swing.JFrame {
         ripristinaGara();
     }
 
+    private JProgressBar sostituisciProgressBar(JProgressBar vecchia) {
+        CorridoreProgressBar nuova = new CorridoreProgressBar();
+        nuova.setFont(vecchia.getFont());
+        nuova.setMinimum(vecchia.getMinimum());
+        nuova.setMaximum(vecchia.getMaximum());
+        nuova.setValue(vecchia.getValue());
+
+        Container parent = vecchia.getParent();
+        Component[] figli = parent.getComponents();
+        for (int i = 0; i < figli.length; i++) {
+            if (figli[i] == vecchia) {
+                parent.remove(i);
+                parent.add(nuova, i);
+                break;
+            }
+        }
+        parent.revalidate();
+        parent.repaint();
+        return nuova;
+    }
+
     /**
      * Ripristina lo stato della gara: azzera i contatori e le visualizzazioni
      * Viene chiamato all'inizio o quando si vuole ricominciare
@@ -256,25 +284,21 @@ public class FRMPista extends javax.swing.JFrame {
      * Gli altri partiranno quando il corridore precedente raggiunge il punto di passaggio
      */
     private void avviaGara() {
-        ripristinaGara();                                      // Azzera tutto
-        CMBSelezioneVelocita.setEnabled(false);         // Non si può più cambiare velocità
-        BTNAvvia.setEnabled(false);                      // Non si può cliccare "Avvia" di nuovo
-        BTNPausa.setEnabled(true);                       // Attiva il bottone "Pausa"
-        BTNRiprendi.setEnabled(false);                   // "Riprendi" non serve ancora
-        BTNFerma.setEnabled(true);                       // Attiva il bottone "Ferma"
+        ripristinaGara();                                  // Azzera tutto
+        CMBSelezioneVelocita.setEnabled(false);           // Non si può più cambiare velocità
+        BTNAvvia.setEnabled(false);                        // Non si può cliccare "Avvia" di nuovo
+        BTNPausa.setEnabled(true);                         // Attiva il bottone "Pausa"
+        BTNRiprendi.setEnabled(false);                     // "Riprendi" non serve ancora
+        BTNFerma.setEnabled(true);                         // Attiva il bottone "Ferma"
 
-        // Legge la velocità scelta dall'utente dalla combo box (Lento, Spedito, Veloce)
-        int millisecondiVelocita = millisecondiVelocitaGara();
+        double velocita = trovaVelocita();                 // Legge la velocità scelta dall'utente
 
-        // Crea i 4 corridori e i loro thread
+        // Crea e avvia tutti i corridori. I corridori successivi aspettano
+        // finché non ricevono il testimone (posAttuale).
         for (int i = 0; i < NUMCORRIDORI; i++) {
-            corridori[i] = new CorridoreDiStaffetta(i, millisecondiVelocita);        // Crea il corridore
-            threadCorridori[i] = new Thread(corridori[i], "Corridore-" + (i + 1)); // Crea il thread
-        }
-
-        // Fa partire solo il primo corridore (gli altri partiranno al loro turno)
-        if (threadCorridori[0] != null) {
-            threadCorridori[0].start();
+            corridori[i] = new Corridore(this, getProgressBar(i), velocita, i);
+            threadCorridori[i] = new Thread(corridori[i], "Corridore-" + (i + 1));
+            threadCorridori[i].start();
         }
     }
 
@@ -285,6 +309,11 @@ public class FRMPista extends javax.swing.JFrame {
     private void pausaGara() {
         if (!paused && !stopped) {
             paused = true;                      // Attiva il flag di pausa
+            for (Corridore c : corridori) {
+                if (c != null) {
+                    c.setInPausa(true);
+                }
+            }
             BTNPausa.setEnabled(false);        // Non puoi cliccare "Pausa" due volte
             BTNRiprendi.setEnabled(true);      // Attiva il bottone "Riprendi"
         }
@@ -296,9 +325,11 @@ public class FRMPista extends javax.swing.JFrame {
      */
     private void riproduciGara() {
         if (paused && !stopped) {
-            synchronized (pauseLock) {          // Sincronizzazione: prende il lock
-                paused = false;                 // Disattiva il flag di pausa
-                pauseLock.notifyAll();          // Sveglia tutti i thread che stavano aspettando
+            paused = false;                    // Disattiva il flag di pausa
+            for (Corridore c : corridori) {
+                if (c != null) {
+                    c.riprendi();
+                }
             }
             BTNPausa.setEnabled(true);         // Attiva il bottone "Pausa"
             BTNRiprendi.setEnabled(false);     // Disattiva il bottone "Riprendi"
@@ -312,11 +343,16 @@ public class FRMPista extends javax.swing.JFrame {
     private void fermaGara() {
         stopped = true;                         // Attiva il flag di stop
         paused = false;                         // Disattiva la pausa
-        synchronized (pauseLock) {              // Sincronizzazione: prende il lock
-            pauseLock.notifyAll();              // Sveglia tutti i thread (se in attesa)
+        synchronized (FRMPista.class) {          // Sincronizzazione: sveglia tutti i corridori bloccati
+            FRMPista.class.notifyAll();         // Sveglia tutti i runner in attesa
+        }
+        for (Thread t : threadCorridori) {
+            if (t != null && t.isAlive()) {
+                t.interrupt();                 // Interrompe i thread rimasti in esecuzione
+            }
         }
 
-        // Aggiorna i bottoni: disabilita quelli di control della gara
+        // Aggiorna i bottoni: disabilita quelli di controllo della gara
         BTNPausa.setEnabled(false);
         BTNRiprendi.setEnabled(false);
         BTNFerma.setEnabled(false);
@@ -337,25 +373,10 @@ public class FRMPista extends javax.swing.JFrame {
     }
 
     /**
-     * Fa partire il prossimo corridore quando il precedente raggiunge il punto di passaggio (90)
-     * Se c'è ancora un corridore che non ha finito e la gara non è stata fermata
-     */
-    private void avviaCorridoreSuccessivo(int indiceAttuale) {
-        int indiceSuccessivo = indiceAttuale + 1;
-        // Se c'è un prossimo corridore, la gara non è fermata e il thread non sta già correndo
-        if (indiceSuccessivo < NUMCORRIDORI && !stopped) {
-            Thread threadSuccessivo = threadCorridori[indiceSuccessivo];
-            if (threadSuccessivo != null && !threadSuccessivo.isAlive()) {
-                threadSuccessivo.start();  // Fa partire il thread del prossimo corridore
-            }
-        }
-    }
-
-    /**
      * Aggiorna la visualizzazione di un corridore: progress bar, testo della posizione e immagine
      * Viene chiamato da ogni thread quando il corridore avanza
      */
-    private void aggiornaProgressioneCorridore(int indice, int valore) {
+    void aggiornaProgressioneCorridore(int indice, int valore) {
         // SwingUtilities.invokeLater esegue il codice nel thread di Swing (thread-safe)
         SwingUtilities.invokeLater(() -> {
             getProgressBar(indice).setValue(valore);                                    // Aggiorna la progress bar
@@ -461,22 +482,19 @@ public class FRMPista extends javax.swing.JFrame {
     }
 
     /**
-     * Legge la velocità selezionata dall'utente e la converte in millisecondi di attesa
-     * Più basso il valore, più veloce corre il corridore
-     * 
-     * Il valore represent il tempo di attesa tra ogni passo.
-     * Una gara "Lento" ha 120ms tra i passi, "Veloce" solo 25ms
+     * Converte la scelta dell'utente in un moltiplicatore di velocità.
+     * Più alto il valore, più il corridore avanza velocemente ad ogni passo.
      */
-    private int millisecondiVelocitaGara() {
+    private double trovaVelocita() {
         switch (CMBSelezioneVelocita.getSelectedIndex()) {
             case 0:  // Indice 0 = "Lento"
-                return 120;  // Attende 120ms tra ogni passo
+                return 0.5;
             case 1:  // Indice 1 = "Spedito"
-                return 60;   // Attende 60ms tra ogni passo
+                return 1.0;
             case 2:  // Indice 2 = "Veloce"
-                return 25;   // Attende 25ms tra ogni passo
+                return 2.0;
             default:
-                return 60;   // Valore di default se qualcosa non va
+                return 1.0;
         }
     }
 
@@ -485,93 +503,11 @@ public class FRMPista extends javax.swing.JFrame {
      * Incrementa il contatore e quando tutti i 4 corridori hanno finito,
      * abilita di nuovo i controlli per una nuova gara
      */
-    private void corridoreCompletato() {
+    void corridoreCompletato() {
         // Incrementa il contatore atomico di corridori finiti
         if (conteggiCompletati.incrementAndGet() == NUMCORRIDORI) {
             // Se tutti i 4 corridori hanno finito, riabilita i controlli
             SwingUtilities.invokeLater(this::abilitaControlliDopoFine);
-        }
-    }
-
-    /**
-     * CorridoreDiStaffetta: Classe interna che rappresenta un corridore nella staffetta
-     * Implementa Runnable, quindi viene eseguita in un thread separato
-     * 
-     * Ogni corridore:
-     * 1. Corre da 0 a 99 (passaggi incrementali)
-     * 2. A 90, fa partire il prossimo corridore (passaggio del testimone)
-     * 3. Supporta pausa e arresto
-     */
-    private class CorridoreDiStaffetta implements Runnable {
-        private final int indice;           // Numero del corridore (0-3)
-        private final int millisecondiPasso;      // Millisecondi di attesa tra ogni passo
-        private int conteggio;                 // Posizione attuale del corridore (0-99)
-
-        /**
-         * Crea un nuovo corridore
-         * @param indice il numero del corridore (0 = primo, 3 = ultimo)
-         * @param millisecondiPasso i millisecondi tra ogni passo
-         */
-        CorridoreDiStaffetta(int indice, int millisecondiPasso) {
-            this.indice = indice;
-            this.millisecondiPasso = millisecondiPasso;
-            this.conteggio = 0;
-        }
-
-        /**
-         * Metodo principale: questo viene eseguito quando il thread parte
-         * Il corridore corre finché non raggiunge 99 o la gara non viene fermata
-         */
-        @Override
-        public void run() {
-            // Mostra il corridore all'inizio (posizione 0)
-            aggiornaProgressioneCorridore(indice, conteggio);
-            
-            // Loop principale della corsa
-            while (!stopped && conteggio < TRAGUARDO) {
-                
-                // Quando il corridore raggiunge la posizione 90, fa partire il prossimo corridore
-                // Se c'è un prossimo corridore, naturalmente
-                if (conteggio == PUNTODISCAMBIO && indice < NUMCORRIDORI - 1) {
-                    avviaCorridoreSuccessivo(indice);  // Passa il testimone al prossimo
-                }
-
-                // Attende il tempo stabilito (120ms per Lento, 60ms per Spedito, ecc.)
-                try {
-                    Thread.sleep(millisecondiPasso);
-                } catch (InterruptedException ex) {
-                    // Se il thread viene interrotto, marca come interrotto e esci
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-
-                // Se la gara è in pausa, aspetta qui finché non riprende
-                synchronized (pauseLock) {
-                    while (paused && !stopped) {
-                        try {
-                            pauseLock.wait();  // Aspetta che qualcuno chiami notifyAll()
-                        } catch (InterruptedException ex) {
-                            Thread.currentThread().interrupt();
-                            stopped = true;    // Se interrotto durante la pausa, ferma tutto
-                            break;
-                        }
-                    }
-                }
-
-                // Se la gara è stata fermata, esci dal loop
-                if (stopped) {
-                    break;
-                }
-
-                // Incrementa la posizione e aggiorna la visualizzazione
-                conteggio++;
-                aggiornaProgressioneCorridore(indice, conteggio);
-            }
-
-            // Se la gara non è stata fermata e il corridore ha raggiunto il traguardo
-            if (!stopped && conteggio >= TRAGUARDO) {
-                corridoreCompletato();  // Notifica che questo corridore ha finito
-            }
         }
     }
 
