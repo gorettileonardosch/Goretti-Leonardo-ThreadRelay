@@ -1,18 +1,28 @@
 package threadrelay;
 
-import javax.swing.*;
 import java.awt.*;
+import javax.swing.*;
 
-public class CorridoreProgressBar extends JProgressBar {
+/**
+ * ProgressBarAtleta - Barra di progresso con emoji corridore
+ * Mostra il progresso della gara con un'emoji che si muove lungo la barra
+ */
+public class ProgressBarAtleta extends JProgressBar {
 
-    private static final String EMOJI = "🏃‍➡️";
+    private static final String EMOJI_CORRIDORE = "🏃‍➡️";
 
-    public CorridoreProgressBar() {
-        super(0, FRMPista.TRAGUARDO);
+    /**
+     * Crea una barra di progresso (da 0 a 99)
+     */
+    public ProgressBarAtleta() {
+        super(0, 99);
         setStringPainted(false);
         setOpaque(true);
     }
 
+    /**
+     * Disegna la barra con sfondo, bordo, percentuale ed emoji
+     */
     @Override
     protected void paintComponent(Graphics g) {
         Graphics2D grafica = (Graphics2D) g.create();
@@ -22,34 +32,38 @@ public class CorridoreProgressBar extends JProgressBar {
         int w = getWidth();
         int h = getHeight();
 
-        // Sfondo corsia
+        // Disegna lo sfondo grigio della barra
         grafica.setColor(new Color(230, 230, 230));
         grafica.fillRect(0, 0, w, h);
 
-        // Bordo
+        // Disegna il bordo grigio scuro
         grafica.setColor(new Color(180, 180, 180));
         grafica.drawRect(0, 0, w - 1, h - 1);
 
-        // Percentuale testo (angolo in basso a destra)
+        // Disegna la percentuale in basso a destra
         String percentText = getValue() + "%";
         grafica.setColor(new Color(80, 80, 80));
         grafica.setFont(new Font("Segoe UI", Font.BOLD, h / 4));
         FontMetrics fm = grafica.getFontMetrics();
         grafica.drawString(percentText, w - fm.stringWidth(percentText) - 8, h - 6);
 
-        // Emoji corridore
+        // Disegna l'emoji corridore
         int emojiSize = (int) (h * 0.5);
         grafica.setFont(new Font("Segoe UI Emoji", Font.PLAIN, emojiSize));
         fm = grafica.getFontMetrics();
 
-        int emojiW = fm.stringWidth(EMOJI);
+        // Calcola la posizione X dell'emoji (segue il progresso)
+        int emojiW = fm.stringWidth(EMOJI_CORRIDORE);
         int xMin = 0;
         int xMax = Math.max(0, w - emojiW);
-        int xPos = xMin + (int) ((xMax - xMin) * (getValue() / (double) FRMPista.TRAGUARDO));
+        int xPos = xMin + (int) ((xMax - xMin) * (getValue() / 99.0));
 
+        // Centra l'emoji verticalmente
         int yPos = (h - fm.getHeight()) / 2 + fm.getAscent();
 
-        grafica.drawString(EMOJI, xPos, yPos);
+        // Disegna l'emoji nella posizione calcolata
+        grafica.drawString(EMOJI_CORRIDORE, xPos, yPos);
+
         grafica.dispose();
     }
 }
