@@ -1,16 +1,21 @@
 package threadrelay;
 
 /**
- * ThreadRelay - Punto di partenza dell'applicazione
- * Crea e mostra la finestra della gara di staffetta
+ * ThreadRelay - Il punto di ingresso principale (Entry Point) di tutta l'applicazione Java.
+ * Il suo unico scopo è contenere il metodo Main e innescare la costruzione dell'interfaccia grafica.
  */
 public class ThreadRelay {
 
     /**
-     * Avvia l'applicazione
+     * Metodo di avvio universale chiamato dalla Java Virtual Machine.
+     * @param args parametri facoltativi inseribili da riga di comando all'avvio.
      */
     public static void main(String[] args) {
-        // Crea e mostra la finestra nel thread di Swing (per operazioni GUI sicure)
+        
+        // Essendo un'applicazione basata su Java Swing, la creazione e manipolazione 
+        // della GUI non deve mai avvenire nel thread "Main".
+        // invokeLater invia una richiesta all'Event Dispatch Thread (EDT) di Swing: 
+        // "Appena sei pronto, crea un nuovo oggetto finestra FRMPista e rendilo visibile".
         java.awt.EventQueue.invokeLater(() -> new FRMPista().setVisible(true));
     }
 }

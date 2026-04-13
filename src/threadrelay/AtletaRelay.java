@@ -1,98 +1,116 @@
 package threadrelay;
 
 /**
- * AtletaRelay - Esegue un singolo atleta nella gara di staffetta
- * Ogni atleta corre da 0 a 99, poi passa il testimone al prossimo
+ * AtletaRelay - Rappresenta e gestisce l'esecuzione di un singolo atleta nella gara.
+ * Implementa Runnable in modo da poter essere eseguito su un Thread separato.
+ * L'atleta "corre" incrementando il proprio conteggio da 0 fino a raggiungere il traguardo (99).
+ * Quando raggiunge un punto specifico (90), "passa il testimone" avviando il compagno successivo.
  */
 public class AtletaRelay implements Runnable {
     
-    // Dati dell'atleta
-    private final int index;              // Posizione (0, 1, 2 o 3)
-    private final int stepMillis;         // Tempo di attesa tra i passi (millisecondi)
-    private int count;                    // Conteggio del progresso (0-99)
-    private final GestoreGara gestore;    // Riferimento al gestore della gara
+    // Attributi che definiscono l'identità e le tempistiche dell'atleta
+    private final int indice;               // Identificativo della posizione dell'atleta (0, 1, 2 o 3)
+    private final int millisecondiPasso;    // Tempo di attesa in millisecondi tra un "passo" e l'altro (determina la velocità)
+    private int conteggio;                  // Variabile che traccia il progresso attuale dell'atleta (da 0 a 99)
+    private final GestoreGara gestore;      // Riferimento al controllore centrale che orchestra la gara
     
-    // Costanti
-    private static final int FINISH = 99;           // Linea di arrivo
-    private static final int RELAY_HANDOFF = 90;    // A quale numero passa il testimone
+    // Costanti per le regole della corsa
+    private static final int TRAGUARDO = 99;           // Valore che decreta la fine della corsa per il singolo atleta
+    private static final int PASSAGGIO_TESTIMONE = 90; // Valore a cui l'atleta innesca la partenza del compagno successivo
 
     /**
-     * Crea un atleta per la gara
-     * @param index numero dell'atleta (0, 1, 2, 3)
-     * @param stepMillis millisecondi tra un passo e l'altro
-     * @param pauseLock non usato (sincronizzazione via gestore)
-     * @param gestore il gestore della gara
+     * Costruttore: inizializza le caratteristiche fondamentali dell'atleta al momento della creazione.
+     * @param indice numero dell'atleta (da 0 a 3, rappresenta l'ordine nella staffetta)
+     * @param millisecondiPasso millisecondi di pausa tra un incremento e l'altro
+     * @param bloccoPausa oggetto usato per la sincronizzazione (gestito internamente dal gestore)
+     * @param gestore il gestore centrale a cui l'atleta fa riferimento per aggiornare la UI e verificare gli stati
      */
-    public AtletaRelay(int index, int stepMillis, Object pauseLock, GestoreGara gestore) {
-        this.index = index;
-        this.stepMillis = stepMillis;
-        this.count = 0;
+    public AtletaRelay(int indice, int millisecondiPasso, Object bloccoPausa, GestoreGara gestore) {
+        this.indice = indice;
+        this.millisecondiPasso = millisecondiPasso;
+        this.conteggio = 0; // Si parte sempre dalla linea di partenza (0)
         this.gestore = gestore;
     }
 
     /**
-     * Esegue la corsa dell'atleta
+     * Metodo core dell'interfaccia Runnable. Contiene il ciclo di vita dell'atleta.
+     * Viene chiamato automaticamente quando si esegue il metodo start() sul Thread associato.
      */
     @Override
     public void run() {
-        // Mostra la posizione iniziale
-        gestore.updateRunnerProgress(index, count);
+        // Appena il thread parte, comunichiamo al gestore la nostra posizione iniziale (0) per aggiornare lo schermo
+        gestore.aggiornaProgressoCorridore(indice, conteggio);
         
-        // Continua finché non è fermato e non ha raggiunto il traguardo
-        while (!gestore.isStopped() && count < FINISH) {
+        // Inizia il ciclo di corsa: continua a correre solo se la gara NON è stata fermata
+        // e se l'atleta NON ha ancora raggiunto il traguardo.
+        while (!gestore.isFermato() && conteggio < TRAGUARDO) {
             
-            // Se siamo a 90, avvia il prossimo atleta (relay)
-            if (count == RELAY_HANDOFF && index < GestoreGara.getNumRunners() - 1) {
-                gestore.startNextRunner(index);
+            // CONTROLLO PASSAGGIO TESTIMONE:
+            // Se l'atleta è arrivato esattamente al punto di scambio (90) e non è l'ultimo atleta (indice < 3),
+            // avvisa il gestore di far partire il Thread dell'atleta successivo.
+            if (conteggio == PASSAGGIO_TESTIMONE && indice < GestoreGara.getNumeroCorridori() - 1) {
+                gestore.avviaProssimoCorridore(indice);
             }
 
-            // Aspetta un po' prima di fare il prossimo passo
+            // SIMULAZIONE DELLO SFORZO FISICO (Velocità):
+            // L'atleta si "ferma" per i millisecondi definiti, simulando il tempo impiegato per fare un passo.
             try {
-                Thread.sleep(stepMillis);
+                Thread.sleep(millisecondiPasso);
             } catch (InterruptedException ex) {
+                // Se il thread viene interrotto durante l'attesa, ripristiniamo lo stato di interruzione ed usciamo dal ciclo
                 Thread.currentThread().interrupt();
                 break;
             }
 
-            // Se la gara è in pausa, aspetta qui
-            synchronized (gestore.getPauseLock()) {
-                while (gestore.isPaused() && !gestore.isStopped()) {
+            // GESTIONE DELLA PAUSA:
+            // Sincronizziamo questo blocco di codice sul "bloccoPausa" condiviso fornito dal Gestore.
+            synchronized (gestore.getBloccoPausa()) {
+                // Finché il gestore segnala che la gara è in pausa (e non è stata interrotta definitivamente),
+                // l'atleta rimane in attesa (wait). Non consuma cicli CPU mentre aspetta.
+                while (gestore.isInPausa() && !gestore.isFermato()) {
                     try {
-                        gestore.getPauseLock().wait();
+                        gestore.getBloccoPausa().wait(); // Resta congelato qui finché non viene chiamato notifyAll() dal Gestore
                     } catch (InterruptedException ex) {
+                        // Se interrotto mentre era in pausa, esce per terminare la corsa
                         Thread.currentThread().interrupt();
                         break;
                     }
                 }
             }
 
-            // Se è stato controllato lo stop, esci
-            if (gestore.isStopped()) {
+            // CONTROLLO DI STOP DEFINITIVO:
+            // Uscito dall'attesa o dalla pausa, verifichiamo subito se nel frattempo l'utente ha premuto "Ferma Gara".
+            // Se sì, interrompiamo immediatamente il ciclo while.
+            if (gestore.isFermato()) {
                 break;
             }
 
-            // Vai al passo successivo e aggiorna il display
-            count++;
-            gestore.updateRunnerProgress(index, count);
+            // PASSO COMPIUTO:
+            // L'atleta avanza di un'unità e segnala al gestore di aggiornare la barra di progresso e l'interfaccia.
+            conteggio++;
+            gestore.aggiornaProgressoCorridore(indice, conteggio);
         }
 
-        // Quando finisce, segnala il completamento
-        if (!gestore.isStopped() && count >= FINISH) {
-            gestore.incrementFinishedCount();
+        // VERIFICA DI FINE CORSA:
+        // Una volta uscito dal ciclo while, l'atleta controlla perché è uscito.
+        // Se è uscito perché ha raggiunto regolarmente il traguardo (e non perché la gara è stata fermata),
+        // notifica al gestore che la sua frazione di corsa è completata.
+        if (!gestore.isFermato() && conteggio >= TRAGUARDO) {
+            gestore.incrementaConteggioTerminati();
         }
     }
 
     /**
-     * Restituisce il conteggio attuale
+     * Metodo di servizio per ottenere l'attuale livello di avanzamento dell'atleta.
      */
-    public int getCount() {
-        return count;
+    public int getConteggio() {
+        return conteggio;
     }
 
     /**
-     * Restituisce l'indice dell'atleta
+     * Metodo di servizio per ottenere il numero (indice) dell'atleta.
      */
-    public int getIndex() {
-        return index;
+    public int getIndice() {
+        return indice;
     }
 }

@@ -4,170 +4,177 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.swing.SwingUtilities;
 
 /**
- * GestoreGara - Controlla tutta la logica della gara di staffetta
- * Gestisce i thread, la pausa, lo stop e gli aggiornamenti della UI
+ * GestoreGara - Il "Direttore di Gara". È la classe ponte tra la logica multithread 
+ * (gli atleti che corrono) e l'interfaccia grafica (la finestra che mostra i risultati).
+ * Mantiene lo stato globale della gara ed espone metodi sicuri per gestire pausa, ripresa e fine.
  */
 public class GestoreGara {
     
-    // Costanti
-    private static final int RUNNERS = 4;           // Numero di atleti
-    private static final int FINISH = 99;           // Valore di arrivo
+    // Costanti generali della gara
+    private static final int CORRIDORI = 4;           // Quanti membri ha una squadra di staffetta
+    private static final int TRAGUARDO = 99;          // Valore target da raggiungere per completare la propria frazione
     
-    // Stato della gara
-    private final Object pauseLock = new Object();  // Per sincronizzare la pausa
-    private volatile boolean paused = false;        // La gara è in pausa?
-    private volatile boolean stopped = false;       // La gara è ferma?
+    // Variabili per gestire lo stato di esecuzione e la sincronizzazione
+    private final Object bloccoPausa = new Object();  // Oggetto fittizio usato come "semaforo" per la sincronizzazione dei Thread
+    private volatile boolean inPausa = false;         // 'volatile' assicura che il cambio di valore sia immediatamente visibile a tutti i thread
+    private volatile boolean fermato = false;         // Segnala ai thread che la gara è stata annullata e devono morire
     
-    // Thread e atleti
-    private final AtletaRelay[] runners = new AtletaRelay[RUNNERS];
-    private final Thread[] runnerThreads = new Thread[RUNNERS];
-    private final AtomicInteger finishedCount = new AtomicInteger(0);  // Atleti terminati
+    // Vettori (Array) per tenere traccia degli oggetti Atleta e dei rispettivi Thread
+    private final AtletaRelay[] corridori = new AtletaRelay[CORRIDORI];
+    private final Thread[] threadCorridori = new Thread[CORRIDORI];
     
-    private final FRMPista frame;  // La finestra principale
+    // Variabile atomica per contare quanti hanno finito la corsa. 
+    // AtomicInteger previene conflitti se più thread provano ad aggiornarla contemporaneamente.
+    private final AtomicInteger conteggioTerminati = new AtomicInteger(0);  
+    
+    private final FRMPista finestra;  // Riferimento alla UI per delegare l'aggiornamento visivo
     
     /**
-     * Crea il gestore della gara
-     * @param frame la finestra dove mostrare i risultati
+     * Costruttore: riceve l'istanza della finestra per poterle inviare aggiornamenti.
+     * @param finestra l'interfaccia principale dell'app
      */
-    public GestoreGara(FRMPista frame) {
-        this.frame = frame;
+    public GestoreGara(FRMPista finestra) {
+        this.finestra = finestra;
     }
     
     /**
-     * Resetta la gara e il display
+     * Riporta la logica e l'interfaccia alle condizioni di partenza.
+     * Pulisce gli stati di interruzione (pausa/stop) e azzera chi ha terminato.
      */
-    public void resetRace() {
-        paused = false;
-        stopped = false;
-        finishedCount.set(0);
+    public void reimpostaGara() {
+        inPausa = false;
+        fermato = false;
+        conteggioTerminati.set(0); // Resetta il contatore atomico a zero
         
-        // Aggiorna la UI nel thread di Swing
+        // L'aggiornamento visivo deve avvenire TASSATIVAMENTE sul thread speciale della UI (EDT),
+        // per questo usiamo SwingUtilities.invokeLater.
         SwingUtilities.invokeLater(() -> {
-            frame.resetRunnerProgress();
+            finestra.reimpostaProgressoCorridori();
         });
     }
     
     /**
-     * Avvia la gara: crea i 4 atleti e inizia il primo
-     * @param speedMillis quanto tempo aspettare tra un passo e l'altro
+     * Funzione innescata dal bottone "Avvia Gara". Prepara i 4 atleti, assegna loro un Thread
+     * ed innesca la partenza del primo frazionista.
+     * @param millisecondiVelocita il ritardo da applicare ad ogni passo degli atleti
      */
-    public void startRace(int speedMillis) {
-        resetRace();
-        stopped = false;
+    public void avviaGara(int millisecondiVelocita) {
+        reimpostaGara(); // Assicuriamoci che tutto sia pulito
+        fermato = false;
         
-        // Crea un atleta per ogni numero
-        for (int i = 0; i < RUNNERS; i++) {
-            runners[i] = new AtletaRelay(i, speedMillis, pauseLock, this);
-            runnerThreads[i] = new Thread(runners[i], "Atleta-" + (i + 1));
+        // Ciclo for che "assume" e posiziona ai blocchi i 4 atleti
+        for (int i = 0; i < CORRIDORI; i++) {
+            // Crea l'oggetto che contiene la logica usando la classe originale AtletaRelay
+            corridori[i] = new AtletaRelay(i, millisecondiVelocita, bloccoPausa, this);
+            // Inserisce l'oggetto logico all'interno di un Thread, nominandolo per facilità di debug
+            threadCorridori[i] = new Thread(corridori[i], "Atleta-" + (i + 1));
         }
         
-        // Avvia solo il primo atleta (il relay parte quando arriva a 90)
-        if (runnerThreads[0] != null) {
-            runnerThreads[0].start();
+        // Essendo una staffetta, NON facciamo partire tutti insieme.
+        // Diamo lo start esclusivamente al PRIMO thread (il corridore 0).
+        if (threadCorridori[0] != null) {
+            threadCorridori[0].start();
         }
     }
     
     /**
-     * Mette in pausa la gara
+     * Mette in pausa la competizione alzando la flag booleana.
+     * Al loro prossimo ciclo (o uscita da uno sleep), i thread vedranno questa flag 
+     * e chiameranno wait() sul bloccoPausa.
      */
-    public void pauseRace() {
-        if (!paused && !stopped) {
-            paused = true;
+    public void mettiInPausaGara() {
+        if (!inPausa && !fermato) {
+            inPausa = true;
         }
     }
     
     /**
-     * Riprende la gara da pausa
+     * Riattiva i thread dormienti ripristinando la competizione.
      */
-    public void resumeRace() {
-        if (paused && !stopped) {
-            synchronized (pauseLock) {
-                paused = false;
-                pauseLock.notifyAll();  // Sveglia i thread in attesa
+    public void riprendiGara() {
+        if (inPausa && !fermato) {
+            // Usiamo il blocco sincronizzato sullo stesso oggetto usato dai thread per la wait()
+            synchronized (bloccoPausa) {
+                inPausa = false;           // Abbassiamo la flag
+                bloccoPausa.notifyAll();   // Emettiamo il segnale di sveglia universale a tutti i thread in attesa
             }
         }
     }
     
     /**
-     * Ferma completamente la gara
+     * Interrompe la gara di netto in modo irrecuperabile.
      */
-    public void stopRace() {
-        stopped = true;
-        paused = false;
-        synchronized (pauseLock) {
-            pauseLock.notifyAll();  // Sveglia i thread in attesa
+    public void fermaGara() {
+        fermato = true;   // Indirizza tutti i thread attivi verso l'uscita dai loro cicli while
+        inPausa = false;  // Disattiva un'eventuale pausa residua
+        
+        // Sveglia forzatamente eventuali thread attualmente "congelati" in pausa affinché 
+        // possano vedere che 'fermato' è diventato true ed auto-distruggersi regolarmente.
+        synchronized (bloccoPausa) {
+            bloccoPausa.notifyAll();  
         }
     }
     
     /**
-     * Avvia il prossimo atleta (al relay)
-     * @param currentIndex l'atleta che passa il testimone
+     * Gestisce il delicato momento del "Passaggio del Testimone".
+     * Viene invocato dal thread dell'atleta in corsa quando il suo contatore raggiunge quota 90.
+     * @param indiceAttuale il numero dell'atleta che sta consegnando il testimone
      */
-    public void startNextRunner(int currentIndex) {
-        int nextIndex = currentIndex + 1;
-        if (nextIndex < RUNNERS && !stopped) {
-            Thread nextThread = runnerThreads[nextIndex];
-            if (nextThread != null && !nextThread.isAlive()) {
-                nextThread.start();  // Avvia il prossimo
+    public void avviaProssimoCorridore(int indiceAttuale) {
+        int indiceProssimo = indiceAttuale + 1;
+        // Controlla che esista effettivamente un prossimo atleta e che la gara non sia stata annullata
+        if (indiceProssimo < CORRIDORI && !fermato) {
+            Thread prossimoThread = threadCorridori[indiceProssimo];
+            // Controllo di sicurezza: verifichiamo che il nuovo thread non sia già stato erroneamente avviato
+            if (prossimoThread != null && !prossimoThread.isAlive()) {
+                prossimoThread.start();  // Da lo sparo di partenza al compagno
             }
         }
     }
     
     /**
-     * Aggiorna il progresso di un atleta sullo schermo
-     * @param index numero dell'atleta
-     * @param value il suo conteggio attuale
+     * Riceve un aggiornamento da un thread Atleta e inoltra la richiesta di update grafico alla UI.
+     * @param indice numero del corridore che sta fornendo un aggiornamento
+     * @param valore la nuova posizione raggiunta (0-99)
      */
-    public void updateRunnerProgress(int index, int value) {
+    public void aggiornaProgressoCorridore(int indice, int valore) {
+        // Obbligatorio usare invokeLater perché Swing non è thread-safe: l'interfaccia 
+        // deve essere modificata solo ed esclusivamente dal suo thread dedicato (Event Dispatch Thread).
         SwingUtilities.invokeLater(() -> {
-            frame.updateRunnerDisplay(index, value);
+            finestra.aggiornaSchermoCorridore(indice, valore);
         });
     }
     
     /**
-     * Segna che un atleta ha finito
-     * Quando tutti e 4 hanno finito, la gara è completa
+     * Traccia la fine della corsa del singolo atleta. Quando il contatore atomico segnala 
+     * che tutti e 4 sono giunti al traguardo, comunica all'interfaccia di sbloccare i comandi iniziali.
      */
-    public void incrementFinishedCount() {
-        if (finishedCount.incrementAndGet() == RUNNERS) {
-            SwingUtilities.invokeLater(frame::enableControlsAfterFinish);
+    public void incrementaConteggioTerminati() {
+        // incrementAndGet somma 1 alla variabile atomica e restituisce subito il nuovo valore.
+        if (conteggioTerminati.incrementAndGet() == CORRIDORI) {
+            SwingUtilities.invokeLater(finestra::abilitaControlliDopoFine);
         }
     }
     
-    // --- Getter per altri oggetti ---
+    // --- Metodi Getter Accessori per fornire dati all'esterno in sola lettura ---
     
-    /**
-     * Restituisce l'oggetto per sincronizzare la pausa
-     */
-    public Object getPauseLock() {
-        return pauseLock;
+    public Object getBloccoPausa() {
+        return bloccoPausa;
     }
     
-    /**
-     * La gara è in pausa?
-     */
-    public boolean isPaused() {
-        return paused;
+    public boolean isInPausa() {
+        return inPausa;
     }
     
-    /**
-     * La gara è ferma?
-     */
-    public boolean isStopped() {
-        return stopped;
+    public boolean isFermato() {
+        return fermato;
     }
     
-    /**
-     * Quanti atleti ci sono?
-     */
-    public static int getNumRunners() {
-        return RUNNERS;
+    public static int getNumeroCorridori() {
+        return CORRIDORI;
     }
     
-    /**
-     * Qual è il valore di arrivo?
-     */
-    public static int getFinishValue() {
-        return FINISH;
+    public static int getValoreTraguardo() {
+        return TRAGUARDO;
     }
 }
