@@ -2,10 +2,11 @@ package threadrelay;
 
 /**
  * FRMPista - Finestra principale dell'applicazione (Interfaccia Grafica).
- * Si occupa esclusivamente di mostrare gli elementi visivi (barre, bottoni, immagini) 
+ * Implementa il pattern Observer per ricevere notifiche sui cambiamenti di stato della gara.
+ * Si occupa esclusivamente di mostrare gli elementi visivi (barre, bottoni, immagini)
  * e di instradare gli eventi (click dell'utente) verso il GestoreGara.
  */
-public class FRMPista extends javax.swing.JFrame {
+public class FRMPista extends javax.swing.JFrame implements GaraObserver {
     
     // Logger per registrare eventuali errori dell'interfaccia
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(FRMPista.class.getName());
@@ -18,8 +19,28 @@ public class FRMPista extends javax.swing.JFrame {
      */
     public FRMPista() {
         initComponents();  // Disegna i componenti grafici (metodo autogenerato da NetBeans)
-        this.gestore = new GestoreGara(this);  // Inizializza la logica passando un riferimento a questa stessa finestra
+        this.gestore = new GestoreGara();  // Inizializza la logica senza parametri
+        this.gestore.addObserver(this);    // Registra questa finestra come observer
         inizializzaControlliGara();  // Configura i comportamenti (Listener) dei bottoni
+    }
+
+    /**
+     * Implementazione dell'interfaccia GaraObserver
+     */
+
+    @Override
+    public void onProgressoCorridoreAggiornato(int indice, int valore) {
+        aggiornaSchermoCorridore(indice, valore);
+    }
+
+    @Override
+    public void onGaraReimpostata() {
+        reimpostaProgressoCorridori();
+    }
+
+    @Override
+    public void onGaraTerminata() {
+        abilitaControlliDopoFine();
     }
 
     /**
